@@ -2,7 +2,16 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { ensureAccessToken, loadCredential, headers, ENDPOINTS } from './lib/auth.mjs';
+import {
+  ensureAccessToken,
+  getNextAccount,
+  refreshAccount,
+  markCooldown,
+  loadPool,
+  loadCredential,
+  headers,
+  ENDPOINTS,
+} from './lib/auth.mjs';
 
 const MODEL_TTL = 5 * 60 * 1000;
 const UPSTREAM_TIMEOUT = Number(process.env.AGY_TIMEOUT_MS || 180000);
@@ -30,27 +39,66 @@ function splitToolId(id) {
   return sig ? { id: id.slice(0, i), sig } : { id, sig: null };
 }
 
-async function upstream(path, body, { stream = false, token } = {}) {
-  let tk = token;
-  if (!tk) tk = (await ensureAccessToken()).token.access_token;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT);
-  let res;
-  try {
-    res = await fetch(ENDPOINTS.daily + path, {
-      method: 'POST',
-      headers: headers(tk, stream ? { Accept: 'text/event-stream' } : {}),
-      body: JSON.stringify(body),
-      signal: ctrl.signal,
-    });
-  } finally {
-    clearTimeout(timer);
+async function upstream(path, body, { stream = false } = {}) {
+  const triedEmails = [];
+  const pool = loadPool();
+  const totalAccounts = Math.max(1, pool.accounts?.length || 1);
+
+  for (let attempt = 0; attempt < totalAccounts; attempt++) {
+    let account;
+    try {
+      account = await getNextAccount(triedEmails);
+    } catch (err) {
+      if (triedEmails.length > 0) {
+        log('Tat ca tai khoan kha dung trong pool deu da duoc thu.');
+      }
+      throw err;
+    }
+
+    triedEmails.push(account.email);
+    let tk = account.token.access_token;
+
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), UPSTREAM_TIMEOUT);
+    let res;
+    try {
+      res = await fetch(ENDPOINTS.daily + path, {
+        method: 'POST',
+        headers: headers(tk, stream ? { Accept: 'text/event-stream' } : {}),
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (res.status === 401) {
+      try {
+        const refreshed = await refreshAccount(account);
+        tk = refreshed.token.access_token;
+        res = await fetch(ENDPOINTS.daily + path, {
+          method: 'POST',
+          headers: headers(tk, stream ? { Accept: 'text/event-stream' } : {}),
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        log('Refresh token that bai cho ' + account.email + ':', e.message);
+      }
+    }
+
+    if (res.status === 429 || res.status === 503) {
+      const errText = await res.clone().text().catch(() => '');
+      const isQuota = res.status === 429 || /QUOTA_EXHAUSTED|RESOURCE_EXHAUSTED|MODEL_CAPACITY_EXHAUSTED|quota|capacity/i.test(errText);
+
+      if (isQuota && totalAccounts > 1 && triedEmails.length < totalAccounts) {
+        markCooldown(account.email, 15 * 60 * 1000, 'HTTP ' + res.status);
+        log('Tai khoan ' + account.email + ' het quota. Tu dong chuyen sang tai khoan tiep theo trong pool...');
+        continue;
+      }
+    }
+
+    return res;
   }
-  if (res.status === 401 || res.status === 403) {
-    const fresh = await ensureAccessToken();
-    return upstream(path, body, { stream, token: fresh.token.access_token });
-  }
-  return res;
 }
 
 async function listModels() {
@@ -347,7 +395,15 @@ export function createServer() {
     const url = new URL(req.url, 'http://localhost');
     try {
       if (req.method === 'GET' && (url.pathname === '/health' || url.pathname === '/')) {
-        return send(res, 200, { ok: true, service: 'agy-proxy', credential: !!loadCredential(), models_cached: !!modelsCache });
+        const pool = loadPool();
+        return send(res, 200, {
+          ok: true,
+          service: 'agy-proxy',
+          credential: !!loadCredential(),
+          accounts_count: pool.accounts.length,
+          active_account: pool.activeEmail,
+          models_cached: !!modelsCache,
+        });
       }
       if (req.method === 'GET' && url.pathname === '/v1/models') {
         return send(res, 200, { object: 'list', data: await listModels() });

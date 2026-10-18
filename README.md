@@ -37,6 +37,7 @@ DSH (dsh-llm-pi-ai) ──/v1──▶ agy-proxy 127.0.0.1:8787 ──v1internal
 | Lệnh | Việc |
 |---|---|
 | `start.cmd` | Đăng nhập (nếu chưa) → cấu hình DSH → chạy proxy |
+| `login.cmd` | Quản lý tài khoản (đăng nhập thêm acc, xem danh sách, quota) |
 | `stop.cmd` | Dừng proxy (theo cổng 8787) |
 | `pnpm status` | Account, tier, quota còn lại, danh sách model |
 | `pnpm login` | Đăng nhập lại / thêm account (ghi đè credential hiện tại) |
@@ -72,6 +73,23 @@ Ví dụ đổi cổng:
 set AGY_PORT=9000
 start.cmd
 ```
+
+## Quản lý nhiều tài khoản (Multi-Account Pool & Tự động xoay vòng khi hết quota)
+
+Dự án hỗ trợ lưu trữ **nhiều tài khoản Google** trong cùng một pool. Khi một tài khoản bị chạm ngưỡng giới hạn (HTTP 429 hoặc hết quota), proxy sẽ **tự động chuyển sang tài khoản tiếp theo** để bạn tiếp tục chat mà không bị ngắt quãng.
+
+| Thao tác | Lệnh |
+|---|---|
+| **Thêm tài khoản mới** | \`node login.mjs\` (hoặc \`pnpm login\`) |
+| **Xem danh sách tài khoản** | \`node login.mjs --list\` |
+| **Đổi tài khoản ưu tiên** | \`node login.mjs --switch <email>\` |
+| **Xóa tài khoản khỏi pool** | \`node login.mjs --remove <email>\` |
+| **Kiểm tra quota từng acc** | \`node status.mjs\` (hoặc \`pnpm status\`) |
+
+### Cơ chế xoay vòng:
+- Danh sách tài khoản được lưu an toàn tại \`%USERPROFILE%\.agy-dsh\accounts.json\`.
+- Khi tài khoản đang dùng gặp lỗi \`429 Rate Limit\` hoặc \`Quota Exhausted\`, tài khoản đó tự động vào danh sách chờ 15 phút (\`cooldown\`).
+- Proxy tự động chọn tài khoản sẵn sàng tiếp theo và gửi lại request ngay lập tức — người dùng trong DSH không nhận thấy bất kỳ lỗi nào.
 
 ## Cơ chế
 
