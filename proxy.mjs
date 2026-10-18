@@ -177,7 +177,8 @@ function toGemini(messages) {
         if (tc.id) callNames.set(tc.id, tc.function?.name);
         const { id, sig } = splitToolId(tc.id || '');
         const fc = { name: tc.function?.name, args, id };
-        parts.push(sig ? { thoughtSignature: sig, functionCall: fc } : { functionCall: fc });
+        const thoughtSignature = (sig && sig.length >= 20) ? sig : 'skip_thought_signature_validator';
+        parts.push({ thoughtSignature, functionCall: fc });
       }
       push('model', parts);
       continue;
