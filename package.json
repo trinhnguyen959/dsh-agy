@@ -1,9 +1,9 @@
 {
   "name": "dsh-agy",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
-  "description": "Dung model/quota Antigravity trong DeepSeek Harness qua cau noi OpenAI-compatible",
+  "description": "Dung model/quota Antigravity trong DeepSeek Harness (Standalone daemon hoặc DSH Cordis Plugin)",
   "engines": {
     "node": ">=18"
   },
@@ -14,5 +14,11 @@
     "install-dsh": "node install-dsh.mjs",
     "test": "node test.mjs"
   },
-  "packageManager": "pnpm@10.34.7"
+  "packageManager": "pnpm@10.34.7",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./proxy": "./proxy.mjs",
+    "./auth": "./lib/auth.mjs"
+  }
 }

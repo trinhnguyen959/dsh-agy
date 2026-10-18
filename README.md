@@ -1,4 +1,10 @@
-# dsh-agy
+# dsh-agy (Branch: plugin)
+
+Tool & Plugin tích hợp **model/quota Antigravity** vào **DeepSeek Harness (DSH)**.
+
+Dự án hỗ trợ **cả 2 chế độ**:
+1. **Chế độ Plugin DSH (Mới - Khuyên dùng):** DSH tự động nạp `dsh-agy` lúc khởi động thông qua Cordis Loader. Proxy tự chạy in-process, tự đóng khi DSH tắt — **hoàn toàn không cần mở file start.cmd nào cả**!
+2. **Chế độ Standalone Daemon:** Chạy độc lập bằng `start.cmd` hoặc `pnpm start` như trước.
 
 Dùng **model/quota Antigravity** trong **DeepSeek Harness (DSH)** qua một proxy OpenAI-compatible chạy local.
 

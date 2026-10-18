@@ -1,4 +1,3 @@
-
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,10 +13,24 @@ function profiles() {
     .filter((p) => fs.existsSync(p));
 }
 
-function block(baseURL) {
-  return [
-    '',
-    '# dsh-agy: Antigravity quota qua proxy local (OpenAI-compatible)',
+function pluginUrl() {
+  return pathToFileURL(path.resolve('./index.js')).href;
+}
+
+function block(baseURL, asPlugin = true) {
+  const lines = [''];
+  if (asPlugin) {
+    lines.push(
+      '# dsh-agy: Plugin tu dong chay in-process cung DSH (khong can start.cmd)',
+      '- id: agy-plugin',
+      '  name: "' + pluginUrl() + '"',
+      '  config:',
+      '    port: 8787',
+      ''
+    );
+  }
+  lines.push(
+    '# dsh-agy: Antigravity quota qua proxy (OpenAI-compatible)',
     '- id: llm-pi-ai',
     '  name: "@deepseek-ai/dsh-llm-pi-ai"',
     '  config:',
@@ -48,8 +61,9 @@ function block(baseURL) {
     '          - id: gpt-oss-120b-medium',
     '            name: GPT-OSS 120B (AGY)',
     '            contextWindow: 131072',
-    '',
-  ].join('\n');
+    ''
+  );
+  return lines.join('\n');
 }
 
 function backup(file) {
@@ -64,10 +78,10 @@ function ensureRef() {
   if (!fs.existsSync(file)) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, 'version: 1\nrefs:\n  AGY_PROXY_KEY: local-proxy\n', 'utf8');
-    return 'tạo mới ~/.dsh/.credentials.yaml';
+    return 'tao moi ~/.dsh/.credentials.yaml';
   }
   let text = fs.readFileSync(file, 'utf8');
-  if (/^\s+AGY_PROXY_KEY:/m.test(text)) return 'AGY_PROXY_KEY đã có';
+  if (/^\s+AGY_PROXY_KEY:/m.test(text)) return 'AGY_PROXY_KEY da co';
   if (/^refs:\s*$/m.test(text)) {
     text = text.replace(/^refs:\s*$/m, 'refs:\n  AGY_PROXY_KEY: local-proxy');
   } else if (/^refs:\s*\{\s*\}\s*$/m.test(text)) {
@@ -78,26 +92,54 @@ function ensureRef() {
   }
   backup(file);
   fs.writeFileSync(file, text, 'utf8');
-  return 'đã thêm AGY_PROXY_KEY vào .credentials.yaml';
+  return 'da them AGY_PROXY_KEY vao .credentials.yaml';
 }
 
-export function install({ baseURL = process.env.AGY_BASE_URL || ('http://127.0.0.1:' + (process.env.AGY_PORT || 8787) + '/v1'), dryRun = false } = {}) {
+export function install({
+  baseURL = process.env.AGY_BASE_URL || ('http://127.0.0.1:' + (process.env.AGY_PORT || 8787) + '/v1'),
+  asPlugin = true,
+  dryRun = false,
+} = {}) {
   const files = profiles();
   const out = [];
   if (!files.length) {
-    out.push('Không thấy ~/.dsh/profiles — bỏ qua cấu hình DSH (chỉ chạy proxy).');
+    out.push('Khong thay ~/.dsh/profiles — bo qua cau hinh DSH.');
     return out;
   }
   for (const file of files) {
-    const text = fs.readFileSync(file, 'utf8');
-    if (/id:\s*llm-pi-ai/.test(text) && new RegExp('^\\s+' + PROVIDER + ':', 'm').test(text)) {
-      out.push(path.basename(path.dirname(file)) + ': route antigravity đã có');
+    let text = fs.readFileSync(file, 'utf8');
+    const hasRoute = /id:\s*llm-pi-ai/.test(text) && new RegExp('^\\s+' + PROVIDER + ':', 'm').test(text);
+    const hasPlugin = /id:\s*agy-plugin/.test(text);
+
+    if (hasRoute && (!asPlugin || hasPlugin)) {
+      out.push(path.basename(path.dirname(file)) + ': route va plugin da co san');
       continue;
     }
-    if (dryRun) { out.push(path.basename(path.dirname(file)) + ': sẽ thêm route (dry-run)'); continue; }
+
+    if (dryRun) {
+      out.push(path.basename(path.dirname(file)) + ': se cap nhat (dry-run)');
+      continue;
+    }
+
     const copy = backup(file);
-    fs.writeFileSync(file, text + block(baseURL), 'utf8');
-    out.push(path.basename(path.dirname(file)) + ': đã thêm route → ' + baseURL + ' (backup ' + path.basename(copy) + ')');
+    if (!hasPlugin && asPlugin) {
+      // Append plugin entry
+      const pEntry = [
+        '',
+        '# dsh-agy: Plugin tu dong chay in-process cung DSH',
+        '- id: agy-plugin',
+        '  name: "' + pluginUrl() + '"',
+        '  config:',
+        '    port: 8787',
+        '',
+      ].join('\n');
+      text = text + pEntry;
+    }
+    if (!hasRoute) {
+      text = text + block(baseURL, false);
+    }
+    fs.writeFileSync(file, text, 'utf8');
+    out.push(path.basename(path.dirname(file)) + ': da cap nhat (backup ' + path.basename(copy) + ')');
   }
   if (!dryRun) out.push(ensureRef());
   return out;
@@ -105,6 +147,7 @@ export function install({ baseURL = process.env.AGY_BASE_URL || ('http://127.0.0
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  for (const line of install({ dryRun })) console.log('[agy]', line);
-  console.log('[agy] Khởi động lại DSH để route mới được nạp.');
+  const asPlugin = !process.argv.includes('--standalone-only');
+  for (const line of install({ dryRun, asPlugin })) console.log('[agy]', line);
+  console.log('[agy] Khoi dong lai DSH de nạp plugin moi.');
 }
