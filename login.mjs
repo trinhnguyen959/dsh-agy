@@ -28,11 +28,27 @@ export function authUrl(challenge, state) {
 }
 
 function openBrowser(url) {
-  const spec = process.platform === 'win32'
-    ? ['cmd.exe', ['/c', 'start', '', url]]
-    : process.platform === 'darwin'
-      ? ['open', [url]]
-      : ['xdg-open', [url]];
+  if (process.platform === 'win32') {
+    try {
+      spawn('powershell.exe', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        `Start-Process '${url.replace(/'/g, "''")}'`
+      ], { detached: true, stdio: 'ignore' }).unref();
+      return true;
+    } catch {
+      try {
+        spawn('cmd.exe', ['/c', 'start', '', url.replace(/&/g, '^&')], { detached: true, stdio: 'ignore' }).unref();
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  }
+  const spec = process.platform === 'darwin'
+    ? ['open', [url]]
+    : ['xdg-open', [url]];
   try {
     spawn(spec[0], spec[1], { detached: true, stdio: 'ignore' }).unref();
     return true;
