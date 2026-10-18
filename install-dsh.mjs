@@ -5,6 +5,7 @@ import { dshHome } from './lib/auth.mjs';
 
 const PROVIDER = 'antigravity';
 
+// Tim tat ca cac profile cua DSH (desktop, web, etc.)
 function profiles(only) {
   const dir = path.join(dshHome(), 'profiles');
   if (!fs.existsSync(dir)) return [];
@@ -12,8 +13,7 @@ function profiles(only) {
     .map((name) => path.join(dir, name, 'cordis.patch.yml'))
     .filter((p) => fs.existsSync(p));
   if (only) return all.filter((p) => path.basename(path.dirname(p)) === only);
-  const web = all.find((p) => path.basename(path.dirname(p)) === 'web');
-  return web ? [web] : all;
+  return all; // Patch tat ca profile tim thay de bat ky ban DSH nao cung nhan
 }
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -23,27 +23,23 @@ function ensurePackageLink(profileDir) {
   fs.mkdirSync(nm, { recursive: true });
   const link = path.join(nm, 'dsh-agy');
   if (fs.existsSync(link)) return 'link da co';
-  fs.symlinkSync(projectRoot, link, 'junction');
-  return 'da tao junction dsh-agy';
+  try {
+    fs.symlinkSync(projectRoot, link, 'junction');
+    return 'da tao junction dsh-agy';
+  } catch {
+    return 'khong tao duoc junction';
+  }
 }
 
-function block(baseURL, asPlugin = true) {
-  const lines = [''];
-  if (asPlugin) {
-    lines.push(
-      '# dsh-agy: Plugin tu dong chay in-process cung DSH (khong can start.cmd)',
-      '- id: agy-plugin',
-      '  name: "dsh-agy"',
-      '  config:',
-      '    port: 8787',
-      ''
-    );
-  }
-  lines.push(
-    '# dsh-agy: Antigravity quota qua proxy (OpenAI-compatible)',
-    '- id: llm-pi-ai',
-    '  name: "@deepseek-ai/dsh-llm-pi-ai"',
-    '  config:',
+function backup(file) {
+  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
+  const to = file + '.bak-' + stamp;
+  fs.copyFileSync(file, to);
+  return to;
+}
+
+function injectProvider(text, baseURL) {
+  const providerConfig = [
     '    providers:',
     '      ' + PROVIDER + ':',
     '        displayName: Antigravity (local)',
@@ -71,16 +67,36 @@ function block(baseURL, asPlugin = true) {
     '          - id: gpt-oss-120b-medium',
     '            name: GPT-OSS 120B (AGY)',
     '            contextWindow: 131072',
-    ''
-  );
-  return lines.join('\n');
-}
+  ].join('\n');
 
-function backup(file) {
-  const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  const to = file + '.bak-' + stamp;
-  fs.copyFileSync(file, to);
-  return to;
+  // Case 1: Da co route antigravity
+  if (new RegExp('^\\s+' + PROVIDER + ':', 'm').test(text)) {
+    return null; // khong can sua
+  }
+
+  // Case 2: Co llm-pi-ai voi providers: {}
+  if (/^\s+providers:\s*\{\s*\}/m.test(text)) {
+    return text.replace(/^\s+providers:\s*\{\s*\}/m, providerConfig);
+  }
+
+  // Case 3: Co llm-pi-ai voi providers: (co provider khac)
+  if (/^\s+providers:\s*$/m.test(text)) {
+    const lines = providerConfig.split('\n').slice(1).join('\n');
+    return text.replace(/^\s+providers:\s*$/m, '    providers:\n' + lines);
+  }
+
+  // Case 4: Chua co llm-pi-ai -> them ca block
+  const fullBlock = [
+    '',
+    '# dsh-agy: Antigravity quota qua proxy local (OpenAI-compatible)',
+    '- id: llm-pi-ai',
+    '  name: "@deepseek-ai/dsh-llm-pi-ai"',
+    '  config:',
+    providerConfig,
+    '',
+  ].join('\n');
+
+  return (text.endsWith('\n') ? text : text + '\n') + fullBlock;
 }
 
 function ensureRef() {
@@ -107,7 +123,6 @@ function ensureRef() {
 
 export function install({
   baseURL = process.env.AGY_BASE_URL || ('http://127.0.0.1:' + (process.env.AGY_PORT || 8787) + '/v1'),
-  asPlugin = false,
   profile = process.env.AGY_DSH_PROFILE || '',
   dryRun = false,
 } = {}) {
@@ -117,55 +132,33 @@ export function install({
     out.push('Khong thay ~/.dsh/profiles — bo qua cau hinh DSH.');
     return out;
   }
-  const links = [];
-  if (asPlugin) {
-    for (const file of files) links.push(path.basename(path.dirname(file)) + ': ' + ensurePackageLink(path.dirname(file)));
-  }
   for (const file of files) {
+    const profName = path.basename(path.dirname(file));
     let text = fs.readFileSync(file, 'utf8');
-    const hasRoute = /id:\s*llm-pi-ai/.test(text) && new RegExp('^\\s+' + PROVIDER + ':', 'm').test(text);
-    const hasPlugin = /id:\s*agy-plugin/.test(text);
+    const updated = injectProvider(text, baseURL);
 
-    if (hasRoute && (!asPlugin || hasPlugin)) {
-      out.push(path.basename(path.dirname(file)) + ': route va plugin da co san');
+    if (updated === null) {
+      out.push(profName + ': route antigravity da co san');
       continue;
     }
 
     if (dryRun) {
-      out.push(path.basename(path.dirname(file)) + ': se cap nhat (dry-run)');
+      out.push(profName + ': se cap nhat route (dry-run)');
       continue;
     }
 
     const copy = backup(file);
-    if (!hasPlugin && asPlugin) {
-      // Append plugin entry
-      const pEntry = [
-        '',
-        '# dsh-agy: Plugin tu dong chay in-process cung DSH',
-        '- id: agy-plugin',
-        '  name: "dsh-agy"',
-        '  config:',
-        '    port: 8787',
-        '',
-      ].join('\n');
-      text = text + pEntry;
-    }
-    if (!hasRoute) {
-      text = text + block(baseURL, false);
-    }
-    fs.writeFileSync(file, text, 'utf8');
-    out.push(path.basename(path.dirname(file)) + ': da cap nhat (backup ' + path.basename(copy) + ')');
+    fs.writeFileSync(file, updated, 'utf8');
+    out.push(profName + ': da cap nhat route antigravity (backup ' + path.basename(copy) + ')');
   }
-  out.push(...links);
   if (!dryRun) out.push(ensureRef());
   return out;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  const asPlugin = process.argv.includes('--plugin');
   const pi = process.argv.indexOf('--profile');
   const profile = pi >= 0 ? process.argv[pi + 1] : '';
-  for (const line of install({ dryRun, asPlugin, profile })) console.log('[agy]', line);
-  console.log('[agy] Khoi dong lai DSH de nạp plugin moi.');
+  for (const line of install({ dryRun, profile })) console.log('[agy]', line);
+  console.log('[agy] Khoi dong lai DSH de nhan provider moi.');
 }
