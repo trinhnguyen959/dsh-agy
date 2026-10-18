@@ -99,6 +99,23 @@ function injectProvider(text, baseURL) {
   return (text.endsWith('\n') ? text : text + '\n') + fullBlock;
 }
 
+function ensureStartup(projectRoot) {
+  if (process.platform !== 'win32') return 'bo qua startup (khong phai Windows)';
+  const appData = process.env.APPDATA;
+  if (!appData) return 'bo qua startup (khong co APPDATA)';
+  const dir = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+  if (!fs.existsSync(dir)) return 'bo qua startup (khong thay thu muc Startup)';
+  const file = path.join(dir, 'dsh-agy-proxy.vbs');
+  const cmdPath = projectRoot.replace(/\\/g, '\\\\');
+  const vbs = [
+    'Set sh = CreateObject("WScript.Shell")',
+    'sh.Run "cmd /c cd /d ""' + projectRoot + '"" && node start.mjs", 0, False',
+    '',
+  ].join('\r\n');
+  fs.writeFileSync(file, vbs, 'utf8');
+  return 'da cai auto-start: ' + file;
+}
+
 function ensureRef() {
   const file = path.join(dshHome(), '.credentials.yaml');
   if (!fs.existsSync(file)) {
@@ -123,7 +140,7 @@ function ensureRef() {
 
 export function install({
   baseURL = process.env.AGY_BASE_URL || ('http://127.0.0.1:' + (process.env.AGY_PORT || 8787) + '/v1'),
-  asPlugin = true,
+  asPlugin = false,
   profile = process.env.AGY_DSH_PROFILE || '',
   dryRun = false,
 } = {}) {
@@ -146,8 +163,8 @@ export function install({
     const hasPlugin = /id:\s*agy-plugin/.test(text);
     const updated = injectProvider(text, baseURL);
 
-    if (updated === null && (hasPlugin || !asPlugin)) {
-      out.push(profName + ': route & plugin da co san');
+    if (updated === null && !hasPlugin) {
+      out.push(profName + ': route antigravity da co san');
       continue;
     }
 
@@ -164,20 +181,6 @@ export function install({
       changed = true;
     }
 
-    if (!hasPlugin && asPlugin) {
-      const pEntry = [
-        '',
-        '# dsh-agy: Plugin tu dong chay in-process cung DSH (tu bat khi mo DSH)',
-        '- id: agy-plugin',
-        '  name: "./node_modules/dsh-agy/index.js"',
-        '  config:',
-        '    port: 8787',
-        '',
-      ].join('\n');
-      text = text + pEntry;
-      changed = true;
-    }
-
     if (changed) {
       fs.writeFileSync(file, text, 'utf8');
       out.push(profName + ': da cap nhat route & plugin (backup ' + path.basename(copy) + ')');
@@ -186,14 +189,15 @@ export function install({
 
   out.push(...links);
   if (!dryRun) out.push(ensureRef());
+  if (!dryRun) out.push(ensureStartup(projectRoot));
   return out;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  const asPlugin = !process.argv.includes('--standalone-only');
+  const asPlugin = process.argv.includes('--plugin');
   const pi = process.argv.indexOf('--profile');
   const profile = pi >= 0 ? process.argv[pi + 1] : '';
   for (const line of install({ dryRun, asPlugin, profile })) console.log('[agy]', line);
-  console.log('[agy] Khoi dong lai DSH de nhan provider & plugin moi.');
+  console.log('[agy] Khoi dong lai DSH de nhan provider moi.');
 }

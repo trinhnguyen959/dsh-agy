@@ -103,8 +103,8 @@ start "dsh-agy proxy" /min cmd /c "cd /d "%DEST%" && node start.mjs"
 echo.
 echo =======================================================
 echo  THANH CONG!
-echo  1. Proxy da duoc khoi dong ngam tai port 8787.
-echo  2. Ca Desktop va Web profile cua DSH da duoc cai route.
+echo  1. Proxy da chay ngam tai port 8787 va TU DONG chay moi khi dang nhap Windows.
+echo  2. Ca Desktop va Web profile cua DSH da duoc cai route Antigravity.
 echo.
 echo  Bay gio ban chi can MO DEEPSEEK HARNESS len:
 echo  -> Bam vao Model Picker o goc duoi
