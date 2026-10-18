@@ -13,7 +13,7 @@ function profiles(only) {
     .map((name) => path.join(dir, name, 'cordis.patch.yml'))
     .filter((p) => fs.existsSync(p));
   if (only) return all.filter((p) => path.basename(path.dirname(p)) === only);
-  return all; // Patch tat ca profile tim thay de bat ky ban DSH nao cung nhan
+  return all; // Patch tat ca profile tim thay
 }
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -71,7 +71,7 @@ function injectProvider(text, baseURL) {
 
   // Case 1: Da co route antigravity
   if (new RegExp('^\\s+' + PROVIDER + ':', 'm').test(text)) {
-    return null; // khong can sua
+    return null;
   }
 
   // Case 2: Co llm-pi-ai voi providers: {}
@@ -79,7 +79,7 @@ function injectProvider(text, baseURL) {
     return text.replace(/^\s+providers:\s*\{\s*\}/m, providerConfig);
   }
 
-  // Case 3: Co llm-pi-ai voi providers: (co provider khac)
+  // Case 3: Co llm-pi-ai voi providers:
   if (/^\s+providers:\s*$/m.test(text)) {
     const lines = providerConfig.split('\n').slice(1).join('\n');
     return text.replace(/^\s+providers:\s*$/m, '    providers:\n' + lines);
@@ -123,6 +123,7 @@ function ensureRef() {
 
 export function install({
   baseURL = process.env.AGY_BASE_URL || ('http://127.0.0.1:' + (process.env.AGY_PORT || 8787) + '/v1'),
+  asPlugin = true,
   profile = process.env.AGY_DSH_PROFILE || '',
   dryRun = false,
 } = {}) {
@@ -132,33 +133,67 @@ export function install({
     out.push('Khong thay ~/.dsh/profiles — bo qua cau hinh DSH.');
     return out;
   }
+  const links = [];
+  if (asPlugin) {
+    for (const file of files) {
+      links.push(path.basename(path.dirname(file)) + ': ' + ensurePackageLink(path.dirname(file)));
+    }
+  }
+
   for (const file of files) {
     const profName = path.basename(path.dirname(file));
     let text = fs.readFileSync(file, 'utf8');
+    const hasPlugin = /id:\s*agy-plugin/.test(text);
     const updated = injectProvider(text, baseURL);
 
-    if (updated === null) {
-      out.push(profName + ': route antigravity da co san');
+    if (updated === null && (hasPlugin || !asPlugin)) {
+      out.push(profName + ': route & plugin da co san');
       continue;
     }
 
     if (dryRun) {
-      out.push(profName + ': se cap nhat route (dry-run)');
+      out.push(profName + ': se cap nhat (dry-run)');
       continue;
     }
 
     const copy = backup(file);
-    fs.writeFileSync(file, updated, 'utf8');
-    out.push(profName + ': da cap nhat route antigravity (backup ' + path.basename(copy) + ')');
+    let changed = false;
+
+    if (updated !== null) {
+      text = updated;
+      changed = true;
+    }
+
+    if (!hasPlugin && asPlugin) {
+      const pEntry = [
+        '',
+        '# dsh-agy: Plugin tu dong chay in-process cung DSH (tu bat khi mo DSH)',
+        '- id: agy-plugin',
+        '  name: "dsh-agy"',
+        '  config:',
+        '    port: 8787',
+        '',
+      ].join('\n');
+      text = text + pEntry;
+      changed = true;
+    }
+
+    if (changed) {
+      fs.writeFileSync(file, text, 'utf8');
+      out.push(profName + ': da cap nhat route & plugin (backup ' + path.basename(copy) + ')');
+    }
   }
+
+  out.push(...links);
   if (!dryRun) out.push(ensureRef());
   return out;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
+  const asPlugin = !process.argv.includes('--standalone-only');
   const pi = process.argv.indexOf('--profile');
   const profile = pi >= 0 ? process.argv[pi + 1] : '';
-  for (const line of install({ dryRun, profile })) console.log('[agy]', line);
-  console.log('[agy] Khoi dong lai DSH de nhan provider moi.');
+  for (const line of install({ dryRun, asPlugin, profile })) console.log('[agy]', line);
+  console.log('[agy] Khoi dong lai DSH de nhan provider & plugin moi.');
 }
