@@ -1,0 +1,98 @@
+# ==========================================
+# Credentials, Tokens & Secrets (Bảo mật)
+# ==========================================
+credential.json
+*.credential.json
+*.token.json
+.primary-credential.json
+.credentials.yaml
+.credentials.yml
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# ==========================================
+# Local Data & Runtime State
+# ==========================================
+data/
+storage/
+*.db
+*.sqlite
+*.sqlite3
+
+# ==========================================
+# Dependencies & Package Managers (Node & pnpm)
+# ==========================================
+node_modules/
+.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ==========================================
+# Logs & Process PID
+# ==========================================
+logs/
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# ==========================================
+# Backup, Temp & Cache Files
+# ==========================================
+*.bak
+*.bak-*
+*.backup
+*.old
+*.orig
+*.tmp
+*.temp
+.tmp/
+tmp/
+.cache/
+
+# ==========================================
+# Operating System Files
+# ==========================================
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# ==========================================
+# IDE & Code Editors
+# ==========================================
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# JetBrains (WebStorm, IntelliJ, etc.)
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Vim & Other editors
+*.swp
+*.swo
+*~
