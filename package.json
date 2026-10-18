@@ -11,15 +11,12 @@
     "start": "node start.mjs",
     "login": "node login.mjs",
     "status": "node status.mjs",
-    "install-dsh": "node install-dsh.mjs",
-    "test": "node test.mjs"
+    "install-dsh": "node install-dsh.mjs"
   },
   "packageManager": "pnpm@10.34.7",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
-    "./proxy": "./proxy.mjs",
-    "./auth": "./lib/auth.mjs",
     "./package.json": "./package.json"
   }
 }

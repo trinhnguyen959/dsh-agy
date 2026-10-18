@@ -41,24 +41,20 @@ DSH (dsh-llm-pi-ai) ──/v1──▶ agy-proxy 127.0.0.1:8787 ──v1internal
 | `pnpm status` | Account, tier, quota còn lại, danh sách model |
 | `pnpm login` | Đăng nhập lại / thêm account (ghi đè credential hiện tại) |
 | `pnpm install-dsh` | Chỉ cấu hình DSH, không chạy proxy (`-- --dry-run` để xem trước) |
-| `pnpm test` | Smoke test: chat, stream, tool call |
 
-## pnpm
+## pnpm (tùy chọn)
 
-Project ghim `pnpm@10.34.7` qua `packageManager` và có `pnpm-lock.yaml` (lockfile 9.0). Corepack sẽ tự tải đúng bản pnpm khi chạy trong thư mục này. Không có dependency runtime,
-nên `pnpm install` chỉ để đồng bộ lockfile:
+Project không có dependency runtime — **không cần `pnpm install`**. Nếu máy có pnpm:
 
 ```powershell
-pnpm install      # tùy chọn, tạo/đồng bộ pnpm-lock.yaml
 pnpm start        # = node start.mjs
 pnpm status
-pnpm test
 pnpm login
 pnpm install-dsh --dry-run
 ```
 
-`start.cmd` tự dùng `pnpm start` nếu máy có pnpm, không có thì fallback `node start.mjs`
-(nhờ vậy copy sang máy khác vẫn chạy được mà không cần cài gì).
+`packageManager` ghim `pnpm@10.34.7`; Corepack tự tải đúng bản khi chạy trong thư mục này.
+Không có pnpm thì dùng trực tiếp `node start.mjs`, `node status.mjs`, `node login.mjs`, `node install-dsh.mjs`.
 
 ## Cấu hình (biến môi trường)
 
@@ -103,3 +99,48 @@ start.cmd
 | 401/403 khi chat | `pnpm login` lại |
 | 429 / quota | Hết quota — chờ reset hoặc thêm account khác |
 | DSH lỗi lúc khởi động sau khi patch | Khôi phục file `.bak-<timestamp>` cạnh `cordis.patch.yml` |
+
+## Máy mới: chạy ở chế độ Plugin (không cần start.cmd)
+
+Yêu cầu: Node.js 18+, DSH đã chạy ít nhất một lần (để có `~/.dsh`).
+
+```powershell
+git clone https://github.com/trinhnguyen959/dsh-agy.git
+cd dsh-agy
+git checkout plugin
+
+# 1) đăng nhập Google một lần (lưu vào %USERPROFILE%\.agy-dsh\credential.json)
+node login.mjs
+
+# 2) ĐÓNG DSH trước, rồi cài plugin vào profile
+node install-dsh.mjs --plugin
+```
+
+Mở lại DSH. Plugin tự chạy proxy trong tiến trình DSH, không cần mở cửa sổ nào.
+
+Kiểm tra:
+
+```powershell
+Get-Content $env:USERPROFILE\.agy-dsh\plugin.log -Tail 10
+```
+
+- `apply() called` + `listening on http://127.0.0.1:8787/v1` → plugin đang giữ port.
+- `reuse` → đang có proxy standalone chạy sẵn; chạy `stop.cmd` rồi mở lại DSH nếu muốn plugin tự giữ port.
+
+Installer sẽ:
+- tạo junction `~/.dsh/profiles/web/node_modules/dsh-agy` → thư mục repo (để loader resolve `dsh-agy`);
+- thêm entry `agy-plugin` với `name: "dsh-agy"` vào `cordis.patch.yml` của profile web;
+- thêm route `llm-pi-ai` + `AGY_PROXY_KEY` nếu chưa có.
+
+Chỉ định profile khác: `node install-dsh.mjs --plugin --profile desktop`.
+
+### Nếu plugin không nạp (plugin.log trống)
+
+Loader của DSH có thể dùng resolver riêng. Khi đó thêm dependency thủ công:
+
+```powershell
+# trong ~/.dsh/profiles/web/package.json, thêm:
+# "dependencies": { "dsh-agy": "file:D:/dev/tools/dsh-agy" }
+```
+
+rồi mở lại DSH. Nếu vẫn lỗi, dùng chế độ standalone (`start.cmd`) — ổn định hơn.

@@ -5,12 +5,15 @@ import { dshHome } from './lib/auth.mjs';
 
 const PROVIDER = 'antigravity';
 
-function profiles() {
+function profiles(only) {
   const dir = path.join(dshHome(), 'profiles');
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
+  const all = fs.readdirSync(dir)
     .map((name) => path.join(dir, name, 'cordis.patch.yml'))
     .filter((p) => fs.existsSync(p));
+  if (only) return all.filter((p) => path.basename(path.dirname(p)) === only);
+  const web = all.find((p) => path.basename(path.dirname(p)) === 'web');
+  return web ? [web] : all;
 }
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
@@ -105,13 +108,18 @@ function ensureRef() {
 export function install({
   baseURL = process.env.AGY_BASE_URL || ('http://127.0.0.1:' + (process.env.AGY_PORT || 8787) + '/v1'),
   asPlugin = false,
+  profile = process.env.AGY_DSH_PROFILE || '',
   dryRun = false,
 } = {}) {
-  const files = profiles();
+  const files = profiles(profile);
   const out = [];
   if (!files.length) {
     out.push('Khong thay ~/.dsh/profiles — bo qua cau hinh DSH.');
     return out;
+  }
+  const links = [];
+  if (asPlugin) {
+    for (const file of files) links.push(path.basename(path.dirname(file)) + ': ' + ensurePackageLink(path.dirname(file)));
   }
   for (const file of files) {
     let text = fs.readFileSync(file, 'utf8');
@@ -148,13 +156,16 @@ export function install({
     fs.writeFileSync(file, text, 'utf8');
     out.push(path.basename(path.dirname(file)) + ': da cap nhat (backup ' + path.basename(copy) + ')');
   }
+  out.push(...links);
   if (!dryRun) out.push(ensureRef());
   return out;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  const asPlugin = process.argv.includes('--plugin'); // experimental: opt-in only
-  for (const line of install({ dryRun, asPlugin })) console.log('[agy]', line);
+  const asPlugin = process.argv.includes('--plugin');
+  const pi = process.argv.indexOf('--profile');
+  const profile = pi >= 0 ? process.argv[pi + 1] : '';
+  for (const line of install({ dryRun, asPlugin, profile })) console.log('[agy]', line);
   console.log('[agy] Khoi dong lai DSH de nạp plugin moi.');
 }

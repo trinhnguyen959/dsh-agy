@@ -34,7 +34,7 @@ if (!cred) {
 
 if (!args.includes('--no-dsh')) {
   try {
-    const lines = install();
+    const lines = install({ asPlugin: args.includes('--plugin') });
     for (const line of lines) console.log('[agy]', line);
   } catch (e) {
     console.warn('[agy] Bỏ qua cấu hình DSH:', e.message);
