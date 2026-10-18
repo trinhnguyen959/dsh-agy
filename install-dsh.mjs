@@ -169,7 +169,7 @@ export function install({
         '',
         '# dsh-agy: Plugin tu dong chay in-process cung DSH (tu bat khi mo DSH)',
         '- id: agy-plugin',
-        '  name: "dsh-agy"',
+        '  name: "./node_modules/dsh-agy/index.js"',
         '  config:',
         '    port: 8787',
         '',
