@@ -1,62 +1,62 @@
-import { createServer } from './proxy.mjs';
-import { loadCredential } from './lib/auth.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 export const name = 'dsh-agy';
 
+function logLine(msg) {
+  const line = new Date().toISOString() + ' ' + msg;
+  try {
+    const dir = path.join(os.homedir(), '.agy-dsh');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'plugin.log'), line + '\n');
+  } catch { /* ignore */ }
+  try { console.log('[dsh-agy] ' + msg); } catch { /* ignore */ }
+}
+
 export function apply(ctx, config = {}) {
+  logLine('apply() called');
   const port = Number(config.port || process.env.AGY_PORT || 8787);
   const host = config.host || process.env.AGY_HOST || '127.0.0.1';
-  const logger = ctx?.logger ? ctx.logger('dsh-agy') : console;
-
   let server = null;
 
-  async function init() {
+  const dispose = () => {
+    if (!server) return;
+    try { server.close(); } catch { /* ignore */ }
+    server = null;
+    logLine('proxy closed');
+  };
+
+  try {
+    if (ctx && typeof ctx.on === 'function') ctx.on('dispose', dispose);
+  } catch (e) {
+    logLine('dispose hook failed: ' + (e && e.message));
+  }
+
+  (async () => {
     try {
-      const health = await fetch('http://' + host + ':' + port + '/health', {
-        signal: AbortSignal.timeout(1000)
-      }).then(r => r.json()).catch(() => null);
+      logLine('importing proxy module');
+      const mod = await import('./proxy.mjs');
+      const auth = await import('./lib/auth.mjs');
+      const cred = auth.loadCredential();
+      logLine('credential: ' + (cred ? (cred.email || 'unknown') : 'NONE'));
 
-      if (health?.service === 'agy-proxy') {
-        if (logger.info) logger.info('[dsh-agy] Proxy already running on port ' + port);
-        else console.log('[dsh-agy] Proxy already running on port ' + port);
-        return;
-      }
-
-      server = createServer();
-      server.listen(port, host, () => {
-        const cred = loadCredential();
-        const msg = '[dsh-agy] In-process proxy started at http://' + host + ':' + port + '/v1 (' + (cred?.email || 'no account') + ')';
-        if (logger.info) logger.info(msg);
-        else console.log(msg);
-      });
-
-      server.on('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-          const msg = '[dsh-agy] Port ' + port + ' in use, attaching to existing instance.';
-          if (logger.warn) logger.warn(msg);
-          else console.warn(msg);
-        } else {
-          if (logger.error) logger.error('[dsh-agy] Error:', err);
-          else console.error('[dsh-agy] Error:', err);
+      try {
+        const r = await fetch('http://' + host + ':' + port + '/health', { signal: AbortSignal.timeout(1200) });
+        const j = await r.json();
+        if (j && j.service === 'agy-proxy') {
+          logLine('proxy already listening on ' + port + ' — reuse');
+          return;
         }
-      });
-    } catch (err) {
-      if (logger.error) logger.error('[dsh-agy] Init error:', err);
-      else console.error('[dsh-agy] Init error:', err);
+      } catch { /* not running */ }
+
+      server = mod.createServer();
+      server.on('error', (e) => logLine('server error: ' + (e && e.code) + ' ' + (e && e.message)));
+      server.listen(port, host, () => logLine('listening on http://' + host + ':' + port + '/v1'));
+    } catch (e) {
+      logLine('init failed: ' + (e && e.stack ? e.stack : String(e)));
     }
-  }
-
-  if (ctx && typeof ctx.on === 'function') {
-    ctx.on('dispose', async () => {
-      if (server) {
-        if (logger.info) logger.info('[dsh-agy] Disposing in-process proxy...');
-        server.close();
-        server = null;
-      }
-    });
-  }
-
-  init();
+  })();
 }
 
 export default { name, apply };

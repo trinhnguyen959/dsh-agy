@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { dshHome } from './lib/auth.mjs';
 
 const PROVIDER = 'antigravity';
@@ -13,8 +13,15 @@ function profiles() {
     .filter((p) => fs.existsSync(p));
 }
 
-function pluginUrl() {
-  return pathToFileURL(path.resolve('./index.js')).href;
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
+
+function ensurePackageLink(profileDir) {
+  const nm = path.join(profileDir, 'node_modules');
+  fs.mkdirSync(nm, { recursive: true });
+  const link = path.join(nm, 'dsh-agy');
+  if (fs.existsSync(link)) return 'link da co';
+  fs.symlinkSync(projectRoot, link, 'junction');
+  return 'da tao junction dsh-agy';
 }
 
 function block(baseURL, asPlugin = true) {
@@ -23,7 +30,7 @@ function block(baseURL, asPlugin = true) {
     lines.push(
       '# dsh-agy: Plugin tu dong chay in-process cung DSH (khong can start.cmd)',
       '- id: agy-plugin',
-      '  name: "' + pluginUrl() + '"',
+      '  name: "dsh-agy"',
       '  config:',
       '    port: 8787',
       ''
@@ -97,7 +104,7 @@ function ensureRef() {
 
 export function install({
   baseURL = process.env.AGY_BASE_URL || ('http://127.0.0.1:' + (process.env.AGY_PORT || 8787) + '/v1'),
-  asPlugin = true,
+  asPlugin = false,
   dryRun = false,
 } = {}) {
   const files = profiles();
@@ -128,7 +135,7 @@ export function install({
         '',
         '# dsh-agy: Plugin tu dong chay in-process cung DSH',
         '- id: agy-plugin',
-        '  name: "' + pluginUrl() + '"',
+        '  name: "dsh-agy"',
         '  config:',
         '    port: 8787',
         '',
@@ -147,7 +154,7 @@ export function install({
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  const asPlugin = !process.argv.includes('--standalone-only');
+  const asPlugin = process.argv.includes('--plugin'); // experimental: opt-in only
   for (const line of install({ dryRun, asPlugin })) console.log('[agy]', line);
   console.log('[agy] Khoi dong lai DSH de nạp plugin moi.');
 }

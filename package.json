@@ -19,6 +19,7 @@
   "exports": {
     ".": "./index.js",
     "./proxy": "./proxy.mjs",
-    "./auth": "./lib/auth.mjs"
+    "./auth": "./lib/auth.mjs",
+    "./package.json": "./package.json"
   }
 }
