@@ -14,5 +14,5 @@
     "install-dsh": "node install-dsh.mjs",
     "test": "node test.mjs"
   },
-  "packageManager": "pnpm@12.14.0"
+  "packageManager": "pnpm@10.34.7"
 }

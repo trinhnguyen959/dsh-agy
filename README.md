@@ -39,7 +39,7 @@ DSH (dsh-llm-pi-ai) ──/v1──▶ agy-proxy 127.0.0.1:8787 ──v1internal
 
 ## pnpm
 
-Project ghim `pnpm@12.14.0` qua `packageManager` và có `pnpm-lock.yaml` (lockfile 9.0). Corepack sẽ tự tải đúng bản pnpm khi chạy trong thư mục này. Không có dependency runtime,
+Project ghim `pnpm@10.34.7` qua `packageManager` và có `pnpm-lock.yaml` (lockfile 9.0). Corepack sẽ tự tải đúng bản pnpm khi chạy trong thư mục này. Không có dependency runtime,
 nên `pnpm install` chỉ để đồng bộ lockfile:
 
 ```powershell
