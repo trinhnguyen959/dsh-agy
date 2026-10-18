@@ -1,6 +1,6 @@
 import http from 'node:http';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn, exec } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import {
   CLIENT_ID,
@@ -38,16 +38,15 @@ export function authUrl(challenge, state) {
 function openBrowser(url) {
   if (process.platform === 'win32') {
     try {
-      spawn('powershell.exe', [
-        '-NoProfile',
-        '-NonInteractive',
-        '-Command',
-        'Start-Process \'' + url.replace(/'/g, "''") + '\'',
-      ], { detached: true, stdio: 'ignore' }).unref();
+      exec('start "" "' + url + '"', (err) => {
+        if (err) {
+          try { exec('rundll32 url.dll,FileProtocolHandler "' + url + '"'); } catch {}
+        }
+      });
       return true;
     } catch {
       try {
-        spawn('cmd.exe', ['/c', 'start', '', url.replace(/&/g, '^&')], { detached: true, stdio: 'ignore' }).unref();
+        exec('rundll32 url.dll,FileProtocolHandler "' + url + '"');
         return true;
       } catch {
         return false;
