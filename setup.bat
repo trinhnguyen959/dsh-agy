@@ -97,16 +97,16 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [4/4] Khoi dong Proxy Antigravity...
-start "dsh-agy proxy" /min cmd /c "cd /d "%DEST%" && node start.mjs"
+echo [4/4] Hoan tat! Plugin da duoc tich hop truc tiep vao DeepSeek Harness.
+echo       Ban khong can phai chay start.mjs nua.
 
 echo.
 echo =======================================================
 echo  THANH CONG!
-echo  1. Proxy da chay ngam tai port 8787 va TU DONG chay moi khi dang nhap Windows.
+echo  1. Plugin da tich hop vao DSH, TU DONG bat ngam khi mo DeepSeek Harness.
 echo  2. Ca Desktop va Web profile cua DSH da duoc cai route Antigravity.
 echo.
-echo  Bay gio ban chi can MO DEEPSEEK HARNESS len:
+echo  Bay gio ban chi can KHOI DONG LAI DEEPSEEK HARNESS:
 echo  -> Bam vao Model Picker o goc duoi
 echo  - Chon nhom: Antigravity [local]
 echo  - Chon model: Gemini 3 Flash hoac Claude Sonnet 4.6 la dung duoc luon!

@@ -99,6 +99,38 @@ function injectProvider(text, baseURL) {
   return (text.endsWith('\n') ? text : text + '\n') + fullBlock;
 }
 
+function injectPlugin(text, projectRoot, port = 8787) {
+  const pluginFile = path.join(projectRoot, 'index.js').replace(/\\/g, '/');
+  if (/id:\s*agy-plugin/.test(text)) {
+    return null;
+  }
+  const pluginBlock = [
+    '',
+    '# dsh-agy: Plugin tu dong chay in-process cung DSH (tu bat khi mo DSH)',
+    '- insert:',
+    '    - id: agy-plugin',
+    '      name: "' + pluginFile + '"',
+    '      config:',
+    '        port: ' + port,
+    '',
+  ].join('\n');
+  return (text.endsWith('\n') ? text : text + '\n') + pluginBlock;
+}
+
+function removeStartup() {
+  if (process.platform !== 'win32') return null;
+  const appData = process.env.APPDATA;
+  if (!appData) return null;
+  const file = path.join(appData, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'dsh-agy-proxy.vbs');
+  if (fs.existsSync(file)) {
+    try {
+      fs.unlinkSync(file);
+      return 'da don dep file auto-start cu: ' + file;
+    } catch { /* ignore */ }
+  }
+  return null;
+}
+
 function ensureStartup(projectRoot) {
   if (process.platform !== 'win32') return 'bo qua startup (khong phai Windows)';
   const appData = process.env.APPDATA;
@@ -140,7 +172,8 @@ function ensureRef() {
 
 export function install({
   baseURL = process.env.AGY_BASE_URL || ('http://127.0.0.1:' + (process.env.AGY_PORT || 8787) + '/v1'),
-  asPlugin = false,
+  port = Number(process.env.AGY_PORT || 8787),
+  asPlugin = true,
   profile = process.env.AGY_DSH_PROFILE || '',
   dryRun = false,
 } = {}) {
@@ -160,44 +193,55 @@ export function install({
   for (const file of files) {
     const profName = path.basename(path.dirname(file));
     let text = fs.readFileSync(file, 'utf8');
-    const hasPlugin = /id:\s*agy-plugin/.test(text);
-    const updated = injectProvider(text, baseURL);
+    let changed = false;
 
-    if (updated === null && !hasPlugin) {
-      out.push(profName + ': route antigravity da co san');
+    const updatedProvider = injectProvider(text, baseURL);
+    if (updatedProvider !== null) {
+      text = updatedProvider;
+      changed = true;
+    }
+
+    if (asPlugin) {
+      const updatedPlugin = injectPlugin(text, projectRoot, port);
+      if (updatedPlugin !== null) {
+        text = updatedPlugin;
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      out.push(profName + ': route & plugin da co san');
       continue;
     }
 
     if (dryRun) {
-      out.push(profName + ': se cap nhat (dry-run)');
+      out.push(profName + ': se cap nhat route & plugin (dry-run)');
       continue;
     }
 
     const copy = backup(file);
-    let changed = false;
-
-    if (updated !== null) {
-      text = updated;
-      changed = true;
-    }
-
-    if (changed) {
-      fs.writeFileSync(file, text, 'utf8');
-      out.push(profName + ': da cap nhat route & plugin (backup ' + path.basename(copy) + ')');
-    }
+    fs.writeFileSync(file, text, 'utf8');
+    out.push(profName + ': da cap nhat route & plugin (backup ' + path.basename(copy) + ')');
   }
 
   out.push(...links);
   if (!dryRun) out.push(ensureRef());
-  if (!dryRun) out.push(ensureStartup(projectRoot));
+  if (!dryRun) {
+    if (asPlugin) {
+      const rm = removeStartup();
+      if (rm) out.push(rm);
+    } else {
+      out.push(ensureStartup(projectRoot));
+    }
+  }
   return out;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  const asPlugin = process.argv.includes('--plugin');
+  const asPlugin = !process.argv.includes('--standalone');
   const pi = process.argv.indexOf('--profile');
   const profile = pi >= 0 ? process.argv[pi + 1] : '';
   for (const line of install({ dryRun, asPlugin, profile })) console.log('[agy]', line);
-  console.log('[agy] Khoi dong lai DSH de nhan provider moi.');
+  console.log('[agy] Khoi dong lai DSH de nhan provider & plugin moi.');
 }
